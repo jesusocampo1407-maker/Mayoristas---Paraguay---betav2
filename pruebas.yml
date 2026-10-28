@@ -1,0 +1,48 @@
+name: Probar reglas de Firestore
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'firestore_corregido_v2.rules'
+      - 'test_reglas_v2.mjs'
+      - 'firebase.json'
+      - '.github/workflows/pruebas.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  pruebas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v4
+
+      - name: Comprobar que existen los archivos necesarios
+        run: |
+          for f in firestore_corregido_v2.rules test_reglas_v2.mjs firebase.json; do
+            if [ ! -f "$f" ]; then echo "::error::Falta el archivo $f en la raíz del repositorio"; exit 1; fi
+          done
+          echo "--- firebase.json ---"; cat firebase.json
+          grep -q "firestore_corregido_v2.rules" firebase.json || { echo "::error::firebase.json no apunta a firestore_corregido_v2.rules"; exit 1; }
+
+      - name: Instalar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Instalar Java (lo necesita el emulador de Firestore)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Instalar dependencias de las pruebas
+        run: |
+          [ -f package.json ] || npm init -y
+          npm install --no-audit --no-fund --save-dev @firebase/rules-unit-testing@3 firebase@10 firebase-tools@13
+
+      - name: Ejecutar las pruebas en el emulador (no toca tu proyecto real)
+        run: npx firebase emulators:exec --only firestore --project demo-mp "node --test test_reglas_v2.mjs"
